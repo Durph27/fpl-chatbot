@@ -1,16 +1,11 @@
-DROP TABLE IF EXISTS players;
-DROP TABLE IF EXISTS teams;
-DROP TABLE IF EXISTS fixtures;
-DROP TABLE IF EXISTS events;
-
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
     id          INT PRIMARY KEY,
     name        VARCHAR(50),
     short_name  VARCHAR(10),
     strength    INT
 );
 
-CREATE TABLE players (
+CREATE TABLE IF NOT EXISTS players (
     id                          INT PRIMARY KEY,
     web_name                    VARCHAR(60),
     first_name                  VARCHAR(60),
@@ -36,7 +31,7 @@ CREATE TABLE players (
     INDEX idx_team (team)
 );
 
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     id                  INT PRIMARY KEY,
     name                VARCHAR(30),
     deadline_time       DATETIME,
@@ -47,7 +42,7 @@ CREATE TABLE events (
     highest_score       INT NULL
 );
 
-CREATE TABLE fixtures (
+CREATE TABLE IF NOT EXISTS fixtures (
     id                  INT PRIMARY KEY,
     event               INT NULL,
     team_h              INT,

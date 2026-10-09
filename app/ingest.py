@@ -118,6 +118,7 @@ def ingest_bootstrap():
         "minutes",
         "goals_scored",
         "assists",
+        "clean_sheets",
         "expected_goals",
         "expected_assists",
         "expected_goal_involvements",

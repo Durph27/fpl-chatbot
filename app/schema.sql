@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS players (
     minutes                     INT,
     goals_scored                INT,
     assists                     INT,
+    clean_sheets                INT,
     expected_goals              DECIMAL(6,2),
     expected_assists            DECIMAL(6,2),
     expected_goal_involvements  DECIMAL(6,2),

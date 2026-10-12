@@ -1,180 +1,117 @@
+import gzip
+import json
+import pathlib
 import time
-from pathlib import Path
+from datetime import UTC, datetime
 
 import pandas as pd
 import requests
-from db import engine
-from sqlalchemy import MetaData, Table, text
-from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+from app.db import engine
+from app.dbutil import clean, ensure_table, upsert
 
 BASE = "https://fantasy.premierleague.com/api"
-HEADERS = {"User-Agent": "Mozilla/5.0 (FPL-Chatbot)"}
+SESSION = requests.Session()
+SESSION.headers.update({"User-Agent": "Mozilla/5.0 (FPL chatbot project)"})
 POS = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
 
-def fetch(path: str):  # return json
-    resp = requests.get(f"{BASE}/{path}", headers=HEADERS, timeout=30)
-    resp.raise_for_status()  # If HTTP error -> exception
-    time.sleep(1)
-    return resp.json()
+def fetch(path: str, retries: int = 3):
+    """Call the API, automatically retry on network errors, 429 (rate limited) or 503 (FPL updating)."""
+    for attempt in range(retries):
+        try:
+            r = SESSION.get(f"{BASE}/{path}", timeout=30)
+            if r.status_code in (429, 503):
+                time.sleep(10 * (attempt + 1))
+                continue
+            r.raise_for_status()
+            return r.json()
+        except requests.RequestException:
+            if attempt == retries - 1:
+                raise
+            time.sleep(3 * (attempt + 1))
+    raise RuntimeError(f"Failed to fetch {path}")
 
 
-def run_schema():
-    schema_path = Path(__file__).with_name("schema.sql")
-    with schema_path.open(encoding="utf-8") as f:
-        statements = [s.strip() for s in f.read().split(";") if s.strip()]
-    with engine.begin() as conn:
-        for stmt in statements:
-            conn.execute(text(stmt))
-    print("Table has been created")
+def save_raw(name: str, obj):
+    """Save raw JSON (gzip-compressed) to data/raw/ for future reconstruction."""
+    d = pathlib.Path("data/raw")
+    d.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M")
+    with gzip.open(d / f"{name}_{stamp}.json.gz", "wt", encoding="utf-8") as f:
+        json.dump(obj, f)
 
 
-def num(df, cols):  # Change data to number
-
-    for c in cols:
-        df[c] = pd.to_numeric(
-            df[c], errors="coerce"
-        )  # coerce: if cannot change to num -> NaN
-    return df
-
-
-def upsert_dataframe(df: pd.DataFrame, table_name: str):
-    """Insert new rows and update existing rows by ID."""
-    if df.empty:
-        return
-
-    table = Table(table_name, MetaData(), autoload_with=engine)
-
-    # Only select columns appear in db
-    columns = [column.name for column in table.columns if column.name in df.columns]
-
-    if "id" not in columns:
-        raise ValueError(f"Table {table_name} or DataFrame is missing 'id'")
-
-    clean_df = df[columns].astype(object)
-    clean_df = clean_df.where(pd.notna(clean_df), None)
-    rows = clean_df.to_dict(orient="records")
-
-    update_columns = {column: column for column in columns if column != "id"}
-
-    with engine.begin() as conn:
-        for start in range(0, len(rows), 500):
-            batch = rows[start : start + 500]
-
-            insert_stmt = mysql_insert(table).values(batch)
-
-            updates = {
-                column: insert_stmt.inserted[column] for column in update_columns
-            }
-
-            if updates:
-                stmt = insert_stmt.on_duplicate_key_update(**updates)
-            else:
-                stmt = insert_stmt
-
-            conn.execute(stmt)
-
-
-def ingest_bootstrap():
-    data = fetch("bootstrap-static/")
-
-    # ---- teams ----
-    teams = pd.DataFrame(data["teams"])[["id", "name", "short_name", "strength"]]
-    upsert_dataframe(teams, "teams")
-
-    # ---- players ----
-    p = pd.DataFrame(data["elements"])
+def build_players(boot: dict) -> pd.DataFrame:
+    p = pd.DataFrame(boot["elements"])
     p["position"] = p["element_type"].map(POS)
-    p["price"] = p["now_cost"] / 10  # API stores price * 10
-    p["team"] = p["team"].astype(int)  # team -> int
-    p = num(
-        p,
-        [
-            "form",
-            "points_per_game",
-            "selected_by_percent",
-            "expected_goals",
-            "expected_assists",
-            "expected_goal_involvements",
-            "ict_index",
-        ],
-    )
-    cols = [
-        "id",
-        "web_name",
-        "first_name",
-        "second_name",
-        "team",
-        "position",
-        "price",
-        "total_points",
-        "form",
-        "points_per_game",
-        "selected_by_percent",
-        "minutes",
-        "goals_scored",
-        "assists",
-        "clean_sheets",
-        "expected_goals",
-        "expected_assists",
-        "expected_goal_involvements",
-        "ict_index",
-        "status",
-        "chance_of_playing_next_round",
-        "news",
-    ]
-    p = p[cols].astype({"chance_of_playing_next_round": "Int64"})
-    upsert_dataframe(p, "players")
-
-    # ---- events (gameweek) ----
-    e = pd.DataFrame(data["events"])
-    e["deadline_time"] = (
-        pd.to_datetime(e["deadline_time"], utc=True)
-        .dt.tz_convert("Asia/Ho_Chi_Minh")
-        .dt.tz_localize(None)
-    )
-    e = e[
-        [
-            "id",
-            "name",
-            "deadline_time",
-            "finished",
-            "is_current",
-            "is_next",
-            "average_entry_score",
-            "highest_score",
-        ]
-    ]
-    e = e.astype({"highest_score": "Int64"})
-    upsert_dataframe(e, "events")
+    p["price"] = p["now_cost"] / 10                  # API stores price x10
+    p = clean(p)
+    p["synced_at"] = pd.Timestamp.now("UTC").tz_localize(None)
+    return p
 
 
-def ingest_fixtures():
-    fx = pd.DataFrame(fetch("fixtures/"))
-    fx["kickoff_time"] = (
-        pd.to_datetime(fx["kickoff_time"], utc=True)
-        .dt.tz_convert("Asia/Ho_Chi_Minh")
-        .dt.tz_localize(None)
-    )
-    fx = fx[
-        [
-            "id",
-            "event",
-            "team_h",
-            "team_a",
-            "kickoff_time",
-            "team_h_difficulty",
-            "team_a_difficulty",
-            "team_h_score",
-            "team_a_score",
-            "finished",
-        ]
+def flatten_fixture_stats(fx_raw: list) -> pd.DataFrame:
+    """fixtures[].stats is nested -> flatten into a table for SQL querying."""
+    rows = []
+    for f in fx_raw:
+        for s in f.get("stats", []):
+            for side in ("h", "a"):
+                for item in s.get(side, []):
+                    rows.append({"fixture_id": f["id"], "identifier": s["identifier"],
+                                 "side": side, "element": item["element"],
+                                 "value": item["value"]})
+    return pd.DataFrame(rows)
+
+
+def sync_bootstrap():
+    # 1) Call API first, don't touch DB yet
+    boot = fetch("bootstrap-static/")
+    fx_raw = fetch("fixtures/")
+    save_raw("bootstrap", boot)
+    save_raw("fixtures", fx_raw)
+
+    # 2) Build DataFrames
+    players = build_players(boot)
+    snap = players.copy()
+    snap["snapshot_date"] = datetime.now(UTC).date()
+    fx = clean(pd.DataFrame(fx_raw).drop(columns=["stats"], errors="ignore"))
+
+    # 3) Table list IN PARENT -> CHILD ORDER
+    # (name, data, primary key, forced types, indexes, foreign keys, unique)
+    specs = [
+        ("element_types", clean(pd.DataFrame(boot.get("element_types", []))),
+         ["id"], {}, [], [], []),
+        ("teams", clean(pd.DataFrame(boot["teams"])), ["id"], {}, [], [], []),
+        ("events", clean(pd.DataFrame(boot["events"])), ["id"], {}, [], [], []),
+        ("phases", clean(pd.DataFrame(boot.get("phases", []))), ["id"], {}, [], [], []),
+        ("chips", clean(pd.DataFrame(boot.get("chips", []))), ["id"], {}, [], [], []),
+        ("players", players, ["id"], {}, ["team", "element_type"],
+         [("team", "teams", "id"), ("element_type", "element_types", "id")],
+         ["code"]),
+        ("fixtures", fx, ["id"], {}, ["event", "team_h", "team_a"],
+         [("event", "events", "id"), ("team_h", "teams", "id"),
+          ("team_a", "teams", "id")], []),
+        ("player_snapshots", snap, ["id", "snapshot_date"],
+         {"snapshot_date": "DATE"}, [], [("id", "players", "id")], []),
+        ("fixture_stats", flatten_fixture_stats(fx_raw),
+         ["fixture_id", "identifier", "side", "element"],
+         {"identifier": "VARCHAR(50)", "side": "CHAR(1)"}, ["element"],
+         [("fixture_id", "fixtures", "id"), ("element", "players", "id")], []),
     ]
-    fx = fx.astype({"event": "Int64", "team_h_score": "Int64", "team_a_score": "Int64"})
-    upsert_dataframe(fx, "fixtures")
+    specs = [s for s in specs if not s[1].empty]
+
+    # 4) Create tables / add new columns (DDL auto-commits, cannot rollback)
+    for name, df, pk, types, idx, fks, uq in specs:
+        ensure_table(name, df, pk, types, idx, fks, uq)
+
+    # 5) Write data in ONE transaction: error midway -> rollback
+    with engine.begin() as conn:
+        for name, df, *_ in specs:
+            upsert(df, name, conn)
+            print(f"  {name}: {len(df)} rows")
+    print("Bootstrap + fixtures sync complete.")
 
 
 if __name__ == "__main__":
-    run_schema()
-    ingest_bootstrap()
-    ingest_fixtures()
+    sync_bootstrap()

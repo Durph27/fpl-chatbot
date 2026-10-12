@@ -3,13 +3,9 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from db import engine
 from sqlalchemy import MetaData, Table, text
 from sqlalchemy.dialects.mysql import insert as mysql_insert
-
-try:
-    from .db import engine
-except ImportError:
-    from db import engine
 
 BASE = "https://fantasy.premierleague.com/api"
 HEADERS = {"User-Agent": "Mozilla/5.0 (FPL-Chatbot)"}

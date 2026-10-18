@@ -68,7 +68,7 @@ def ensure_table(name, df, pk, types=None, indexes=(), fks=(), uniques=()):
     If the table already exists, only add new columns that appear in the data.
 
     fks: [(column, parent_table, parent_column), ...]   -> parent table must be created first
-    uniques: [column, ...]
+    uniques: [column | (column, ...), ...]
     """
     types = dict(types or {})
     for col, _parent, _pcol in fks:          # FK columns are always BIGINT to match parent table
@@ -81,7 +81,10 @@ def ensure_table(name, df, pk, types=None, indexes=(), fks=(), uniques=()):
             parts = [f"`{c}` {t}" for c, t in cols.items()]
             parts.append("PRIMARY KEY (" + ", ".join(f"`{c}`" for c in pk) + ")")
             for u in uniques:
-                parts.append(f"CONSTRAINT `uq_{name}_{u}` UNIQUE (`{u}`)")
+                unique_cols = (u,) if isinstance(u, str) else tuple(u)
+                unique_name = "_".join(unique_cols)
+                quoted_cols = ", ".join(f"`{col}`" for col in unique_cols)
+                parts.append(f"CONSTRAINT `uq_{name}_{unique_name}` UNIQUE ({quoted_cols})")
             for col, parent, pcol in fks:
                 parts.append(
                     f"CONSTRAINT `fk_{name}_{col}` FOREIGN KEY (`{col}`) "
@@ -101,16 +104,20 @@ def ensure_table(name, df, pk, types=None, indexes=(), fks=(), uniques=()):
                     print(f"  + {name}: added new column `{c}`")
 
 
-def upsert(df: pd.DataFrame, name: str, conn, chunk: int = 200):
-    """Insert new rows; update on primary key conflict."""
+def upsert(df: pd.DataFrame, name: str, conn, chunk: int = 200, key_columns=None):
+    """Insert new rows; update when a primary or specified unique key conflicts."""
     table = Table(name, MetaData(), autoload_with=conn)
     pk = [c.name for c in table.primary_key.columns]
-    df = df.drop_duplicates(subset=pk, keep="last")
+    key_columns = list(key_columns or pk)
+    missing_keys = set(key_columns) - set(df.columns)
+    if missing_keys:
+        raise ValueError(f"{name}: missing upsert key columns {sorted(missing_keys)}")
+    df = df.drop_duplicates(subset=key_columns, keep="last")
     df = df.astype(object).where(df.notna(), None)
     records = df.to_dict("records")
     for i in range(0, len(records), chunk):
         stmt = insert(table).values(records[i:i + chunk])
-        update_cols = {c: stmt.inserted[c] for c in df.columns if c not in pk}
+        update_cols = {c: stmt.inserted[c] for c in df.columns if c not in key_columns}
         if not update_cols:                       # table has only key columns
-            update_cols = {pk[0]: stmt.inserted[pk[0]]}
+            update_cols = {key_columns[0]: stmt.inserted[key_columns[0]]}
         conn.execute(stmt.on_duplicate_key_update(**update_cols))

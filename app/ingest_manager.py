@@ -9,8 +9,8 @@ from app.db import engine
 from app.dbutil import clean, ensure_table, upsert
 from app.ingest import fetch
 
-
 ALL_CHIPS = ("wildcard", "freehit", "bboost", "3xc")
+MANAGER_TABLES = ("manager_squads", "manager_gw_history", "manager_chips", "managers")
 
 MANAGER_SCHEMAS = (
     (
@@ -36,11 +36,15 @@ MANAGER_SCHEMAS = (
          "is_vice_captain"),
         ["manager_id", "gw", "player_id"],
         {
-            "manager_id": "INT", "gw": "INT", "player_id": "INT",
+            "manager_id": "INT", "gw": "BIGINT", "player_id": "BIGINT",
             "squad_position": "INT", "multiplier": "INT", "is_captain": "BOOLEAN",
             "is_vice_captain": "BOOLEAN",
         },
-        [], [("manager_id", "managers", "manager_id")], [],
+        [], [
+            ("manager_id", "managers", "manager_id"),
+            ("player_id", "players", "id"),
+            ("gw", "events", "id"),
+        ], [],
     ),
     (
         "manager_gw_history",
@@ -48,7 +52,7 @@ MANAGER_SCHEMAS = (
          "team_value", "event_transfers", "event_transfers_cost", "points_on_bench"),
         ["manager_id", "gw"],
         {
-            "manager_id": "INT", "gw": "INT", "points": "INT", "total_points": "INT",
+            "manager_id": "INT", "gw": "BIGINT", "points": "INT", "total_points": "INT",
             "overall_rank": "INT", "gw_rank": "INT", "bank": "DECIMAL(4,1)",
             "team_value": "DECIMAL(5,1)", "event_transfers": "INT",
             "event_transfers_cost": "INT", "points_on_bench": "INT",

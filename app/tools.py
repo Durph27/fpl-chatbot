@@ -1,4 +1,4 @@
-"""MySQL query and squad-management tools for the FPL Chatbot.
+"""MySQL query, squad-management, and real-time Google Search tools for the FPL Chatbot.
 
 Compatible with the table structure in `app/ingest.py`, `app/ingest_manager.py`,
 and the Google GenAI SDK. Includes:
@@ -7,14 +7,19 @@ and the Google GenAI SDK. Includes:
   - Personal manager tools: `refresh_manager`, `get_my_squad`, `analyze_my_squad`,
     `suggest_transfers`, `suggest_captain`
   - Fallback SQL tool: `run_readonly_sql`
+  - Real-time Google Search tool: `search_premier_league_web` (for Premier League
+    and FPL questions whose data is not stored in the MySQL database)
 """
 
-import math
-import re
 from collections import Counter
 from decimal import Decimal
+import math
+import os
+import re
 from typing import Any
 
+from google import genai
+from google.genai import types
 import pandas as pd
 from sqlalchemy import text
 
@@ -75,7 +80,7 @@ def _get_next_gw() -> int:
     return int(gw) if gw is not None else 1
 
 
-def _normalize_money(val: float | None) -> float:
+def _normalize_money(val: float | int | None) -> float:
     """
     Normalize FPL money values (`bank_balance` or `team_value`) to millions (£m).
     If the value is stored in tenths (for example, 15 for £1.5m or 1005 for £100.5m),
@@ -103,7 +108,7 @@ def _ensure_manager_synced(manager_id: int) -> dict[str, Any] | None:
             row = conn.execute(check_sql, {"mid": target_id}).fetchone()
         if row and int(row[0]) > 0 and int(row[1]) > 0:
             return None
-    except Exception:  # noqa: BLE001, S110
+    except Exception:  # noqa: BLE001
         pass
 
     return sync_manager(target_id)
@@ -881,14 +886,12 @@ def suggest_transfers(
         pos_aliases = {"FW": "FWD", "ST": "FWD", "GK": "GK", "GKP": "GK", "DEF": "DEF", "DF": "DEF", "MID": "MID", "MF": "MID"}
         pos_filter = pos_aliases.get(position.upper().strip(), position.upper().strip())
 
-    # Cache upcoming fixtures per team
     teams_df = pd.read_sql(text("SELECT id FROM teams"), engine)
     team_fixtures_map: dict[int, list[dict[str, Any]]] = {
         int(row["id"]): _get_team_upcoming_fixtures(int(row["id"]), next_gw, num_gws)
         for _, row in teams_df.iterrows()
     }
 
-    # Evaluate current squad players to identify weak links
     squad_evaluated = []
     for p in all_squad:
         if pos_filter and p["position"] != pos_filter:
@@ -897,11 +900,9 @@ def suggest_transfers(
         metrics = _score_player_for_upcoming_gws(p, t_fixtures, next_gw)
         squad_evaluated.append({**p, **metrics, "fixtures": t_fixtures})
 
-    # Sort weakest squad players first
     squad_evaluated.sort(key=lambda x: (x["score"], x["ep_next"], x["form"]))
     weakest_players = squad_evaluated[:6]
 
-    # Query top available replacement candidates from the market
     market_sql = text("""
         SELECT
             p.id AS player_id,
@@ -955,7 +956,6 @@ def suggest_transfers(
                 continue
 
             in_team_id = int(p_in["team_id"])
-            # Enforce max 3 players per Premier League club after selling p_out
             current_in_team_count = club_counts[in_team_id] - (1 if in_team_id == out_team_id else 0)
             if current_in_team_count >= 3:
                 continue
@@ -1097,7 +1097,7 @@ _FORBIDDEN_SQL_PATTERN = re.compile(
 
 
 def run_readonly_sql(sql_query: str) -> dict[str, Any]:
-    """Execute a read-only MySQL SELECT when the request cannot be handled by a specialized tool.
+    """Execute a read-only MySQL SELECT when an IN-SCOPE FPL statistical request cannot be handled by a specialized tool.
 
     Main MySQL table structures available for SELECT queries:
       - teams(id, name, short_name, strength, strength_overall_home, strength_overall_away, strength_attack_home, strength_attack_away, strength_defence_home, strength_defence_away)
@@ -1109,6 +1109,13 @@ def run_readonly_sql(sql_query: str) -> dict[str, Any]:
       - manager_gw_history(manager_id, gw, points, total_points, overall_rank, gw_rank, bank, team_value, event_transfers, event_transfers_cost, points_on_bench)
       - manager_squads(manager_id, gw, player_id, squad_position, multiplier, is_captain, is_vice_captain)
       - manager_chips(id, manager_id, gw, chip_name, used_time)
+
+    IMPORTANT DATABASE SCOPE RULES:
+      - The tables above DO NOT store real-life club head coaches/managers, real-life club captains, referee names, or external football news. Do NOT call `run_readonly_sql` for those questions; call `search_premier_league_web` instead.
+      - When querying `fixtures` for a team `t.id`:
+        * Clean sheet condition: `(f.team_h = t.id AND f.team_a_score = 0) OR (f.team_a = t.id AND f.team_h_score = 0)`
+        * Goals scored by `t.id`: `CASE WHEN f.team_h = t.id THEN f.team_h_score ELSE f.team_a_score END`
+        * Goals conceded by `t.id`: `CASE WHEN f.team_h = t.id THEN f.team_a_score ELSE f.team_h_score END`
 
     Args:
         sql_query: A valid MySQL SELECT query. Only SELECT or WITH ... SELECT queries are allowed, with one statement maximum.
@@ -1144,6 +1151,66 @@ def run_readonly_sql(sql_query: str) -> dict[str, Any]:
         }
 
 
+# =====================================================================
+# REAL-TIME GOOGLE SEARCH TOOL FOR RELATED PREMIER LEAGUE / FPL FACTS
+# =====================================================================
+
+def search_premier_league_web(question: str) -> dict[str, Any]:
+    """Search Google in real time for Premier League and FPL-related questions whose answers are NOT stored in the MySQL database (for example, who is the current head coach/manager of Manchester United, who is a club's real-life captain, or latest press conference news).
+
+    Do NOT call this tool for topics unrelated to football/Premier League/FPL.
+
+    Args:
+        question: The Premier League or FPL question to search on Google.
+
+    Returns:
+        A dictionary containing the real-time web search answer grounded on the current Premier League clubs in the database.
+    """
+    try:
+        teams_df = pd.read_sql(text("SELECT name, short_name FROM teams ORDER BY name"), engine)
+        current_teams = [f"{r['name']} ({r['short_name']})" for _, r in teams_df.iterrows()]
+    except Exception:  # noqa: BLE001
+        current_teams = []
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {
+            "in_database": False,
+            "error": "GEMINI_API_KEY is missing; cannot run Google Search.",
+        }
+
+    teams_context = (
+        f"The 20 Premier League clubs in the current season database are: {', '.join(current_teams)}. "
+        if current_teams
+        else ""
+    )
+
+    try:
+        client = genai.Client(api_key=api_key)
+        search_response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=(
+                f"{teams_context}Use Google Search to find the most up-to-date, current information "
+                f"to answer this Premier League / FPL question accurately (do not rely on outdated past seasons): {question}"
+            ),
+            config=types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                temperature=0.0,
+            ),
+        )
+        return {
+            "in_database": False,
+            "source": "Google Search (Real-time)",
+            "current_season_clubs": current_teams,
+            "answer": search_response.text,
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "in_database": False,
+            "error": f"Google Search lookup failed: {exc!s}",
+        }
+
+
 ALL_TOOLS = [
     get_player_info,
     top_players,
@@ -1156,6 +1223,7 @@ ALL_TOOLS = [
     suggest_transfers,
     suggest_captain,
     run_readonly_sql,
+    search_premier_league_web,
 ]
 
 TOOL_MAP = {func.__name__: func for func in ALL_TOOLS}

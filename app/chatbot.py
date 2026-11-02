@@ -3,13 +3,14 @@
 Supports:
   1. Multi-user sessions where the user provides or switches their FPL Manager ID,
      automatically triggering `refresh_manager`.
-  2. Real-time Google Search (`search_premier_league_web`) for related Premier League
-     and FPL questions whose data is not in the MySQL database (such as current club
-     head coaches or real-life club captains).
+  2. Real-time Google Search (`search_premier_league_web`) anchored to the current
+     date for related Premier League and FPL questions whose data is not in the
+     MySQL database (such as current club head coaches or real-life club captains).
   3. Strict refusal of any unrelated, non-football/non-FPL questions.
 """
 
 import os
+from datetime import datetime
 
 from dotenv import load_dotenv
 from google import genai
@@ -19,10 +20,13 @@ from app.tools import ALL_TOOLS, TOOL_MAP, refresh_manager
 
 load_dotenv()
 
-SYSTEM_INSTRUCTION = """
+
+def _build_system_instruction() -> str:
+    today_str = datetime.now().strftime("%B %d, %Y")
+    current_year = datetime.now().year
+    return f"""
 You are a dedicated AI assistant specializing in Fantasy Premier League (FPL) and the English Premier League.
-Help FPL managers analyze players and fixtures, compare statistics, understand FPL rules,
-and make squad-management decisions.
+Current date: {today_str} (Year {current_year}).
 
 STRICT 3-TIER ROUTING & GUARDRAIL POLICY:
 1. TIER 1 — FPL & PREMIER LEAGUE DATA IN MYSQL (USE DATABASE TOOLS):
@@ -37,9 +41,9 @@ STRICT 3-TIER ROUTING & GUARDRAIL POLICY:
 
 2. TIER 2 — RELATED PREMIER LEAGUE / FPL QUESTIONS NOT IN MYSQL (USE `search_premier_league_web`):
    - If the user asks a question that IS related to the Premier League, its clubs, players, or FPL, but the information is NOT stored in the MySQL database (for example: "Who is the current head coach/manager of Manchester United?", "Who are the real-life club captains of the Premier League teams?", "Latest press conference or transfer news about a Premier League player/club"):
-     * NEVER answer from your pre-trained memory (which may be outdated).
-     * NEVER guess from a SQL player list.
-     * ALWAYS call `search_premier_league_web(question)` to retrieve the latest real-time information from Google Search, and answer the user accurately based on the search result.
+     * Remember that today is {today_str} ({current_year}) and your pre-trained memory from 2024/2025 is OUTDATED.
+     * ALWAYS call `search_premier_league_web(question)` and include the year {current_year} in `question`.
+     * Base your final answer strictly on the `{current_year}` result and `live_news_headlines` returned by `search_premier_league_web` — NEVER override the tool output with your outdated 2024/2025 pre-training memory.
 
 3. TIER 3 — UNRELATED / OFF-TOPIC QUESTIONS (MUST REFUSE IMMEDIATELY):
    - If the user asks about anything UNRELATED to Fantasy Premier League (FPL) or Premier League football (for example: writing general code, math homework, weather, cooking, politics, movies, general trivia, other sports, or unrelated topics):
@@ -65,7 +69,7 @@ def create_auto_chat_session(model_name: str = "gemini-3.5-flash-lite"):
     """Create a multi-turn chat session with automatic tool execution."""
     client = get_gemini_client()
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_INSTRUCTION,
+        system_instruction=_build_system_instruction(),
         tools=ALL_TOOLS,
         temperature=0.1,
     )
@@ -87,7 +91,7 @@ def ask_with_manual_tool_loop(
     )
 
     config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_INSTRUCTION,
+        system_instruction=_build_system_instruction(),
         tools=ALL_TOOLS,
         automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         temperature=0.1,
@@ -156,7 +160,6 @@ def main():
                 f"GW: {summary.get('current_gw')} | "
                 f"Squad players: {summary.get('squad_count')}"
             )
-            # Record active manager_id in conversation history so the model knows it immediately
             history.append(
                 types.Content(
                     role="user",

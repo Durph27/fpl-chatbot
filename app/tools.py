@@ -11,16 +11,20 @@ and the Google GenAI SDK. Includes:
     and FPL questions whose data is not stored in the MySQL database)
 """
 
-from collections import Counter
-from decimal import Decimal
 import math
 import os
 import re
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from collections import Counter
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
+import pandas as pd
 from google import genai
 from google.genai import types
-import pandas as pd
 from sqlalchemy import text
 
 from app.db import engine
@@ -80,7 +84,7 @@ def _get_next_gw() -> int:
     return int(gw) if gw is not None else 1
 
 
-def _normalize_money(val: float | int | None) -> float:
+def _normalize_money(val: float | None) -> float:
     """
     Normalize FPL money values (`bank_balance` or `team_value`) to millions (£m).
     If the value is stored in tenths (for example, 15 for £1.5m or 1005 for £100.5m),
@@ -108,7 +112,7 @@ def _ensure_manager_synced(manager_id: int) -> dict[str, Any] | None:
             row = conn.execute(check_sql, {"mid": target_id}).fetchone()
         if row and int(row[0]) > 0 and int(row[1]) > 0:
             return None
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         pass
 
     return sync_manager(target_id)
@@ -1155,6 +1159,29 @@ def run_readonly_sql(sql_query: str) -> dict[str, Any]:
 # REAL-TIME GOOGLE SEARCH TOOL FOR RELATED PREMIER LEAGUE / FPL FACTS
 # =====================================================================
 
+def _fetch_google_news_rss(query: str, max_items: int = 8) -> list[dict[str, str]]:
+    """
+    Fetch real-time headlines and publication dates from Google News RSS.
+    Uses only Python's standard library (`urllib.request` + `xml.etree.ElementTree`).
+    """
+    encoded_q = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded_q}&hl=en-GB&gl=GB&ceid=GB:en"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    headlines: list[dict[str, str]] = []
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            xml_bytes = resp.read()
+        root = ET.fromstring(xml_bytes)
+        for item in root.findall(".//item")[:max_items]:
+            title = (item.findtext("title") or "").strip()
+            pub_date = (item.findtext("pubDate") or "").strip()
+            if title:
+                headlines.append({"title": title, "published": pub_date})
+    except Exception:  # noqa: BLE001, S110
+        pass
+    return headlines
+
+
 def search_premier_league_web(question: str) -> dict[str, Any]:
     """Search Google in real time for Premier League and FPL-related questions whose answers are NOT stored in the MySQL database (for example, who is the current head coach/manager of Manchester United, who is a club's real-life captain, or latest press conference news).
 
@@ -1164,51 +1191,88 @@ def search_premier_league_web(question: str) -> dict[str, Any]:
         question: The Premier League or FPL question to search on Google.
 
     Returns:
-        A dictionary containing the real-time web search answer grounded on the current Premier League clubs in the database.
+        A dictionary containing the real-time web search answer grounded on the current date and current Premier League clubs.
     """
+    now = datetime.now()
+    today_str = now.strftime("%B %d, %Y")
+    current_year = now.year
+
     try:
         teams_df = pd.read_sql(text("SELECT name, short_name FROM teams ORDER BY name"), engine)
         current_teams = [f"{r['name']} ({r['short_name']})" for _, r in teams_df.iterrows()]
     except Exception:  # noqa: BLE001
         current_teams = []
 
+    # 1. Fetch live Google News RSS headlines explicitly anchored to the current year
+    dated_query = f"{question} {current_year}" if str(current_year) not in question else question
+    live_headlines = _fetch_google_news_rss(dated_query, max_items=8)
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         return {
             "in_database": False,
-            "error": "GEMINI_API_KEY is missing; cannot run Google Search.",
+            "current_date": today_str,
+            "live_news_headlines": live_headlines,
+            "error": "GEMINI_API_KEY is missing; returning live Google News RSS headlines only.",
         }
 
     teams_context = (
-        f"The 20 Premier League clubs in the current season database are: {', '.join(current_teams)}. "
+        f"The 20 Premier League clubs in the current {current_year} season database are: {', '.join(current_teams)}.\n"
         if current_teams
         else ""
     )
+    rss_context = (
+        "Live Google News headlines retrieved right now:\n"
+        + "\n".join(f"- [{h['published']}] {h['title']}" for h in live_headlines)
+        + "\n\n"
+        if live_headlines
+        else ""
+    )
 
-    try:
-        client = genai.Client(api_key=api_key)
-        search_response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=(
-                f"{teams_context}Use Google Search to find the most up-to-date, current information "
-                f"to answer this Premier League / FPL question accurately (do not rely on outdated past seasons): {question}"
-            ),
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                temperature=0.0,
-            ),
-        )
-        return {
-            "in_database": False,
-            "source": "Google Search (Real-time)",
-            "current_season_clubs": current_teams,
-            "answer": search_response.text,
-        }
-    except Exception as exc:  # noqa: BLE001
-        return {
-            "in_database": False,
-            "error": f"Google Search lookup failed: {exc!s}",
-        }
+    prompt = (
+        f"IMPORTANT TEMPORAL CONTEXT: Today's date is {today_str} (Year {current_year}).\n"
+        f"{teams_context}"
+        f"{rss_context}"
+        f"Your pre-trained knowledge cutoff is outdated (from 2024/2025). Do NOT answer using "
+        f"2024/2025 information if changes occurred in {current_year}.\n"
+        f"Run a Google Search including the year '{current_year}' to verify the current {current_year} "
+        f"answer for: {question}"
+    )
+
+    client = genai.Client(api_key=api_key)
+    for model_candidate in ("gemini-3.6-flash", "gemini-3.5-flash-lite"):
+        try:
+            search_response = client.models.generate_content(
+                model=model_candidate,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    tools=[types.Tool(google_search=types.GoogleSearch())],
+                    temperature=0.0,
+                ),
+            )
+            if search_response and search_response.text:
+                return {
+                    "in_database": False,
+                    "current_date": today_str,
+                    "source": f"Google Search Grounding ({model_candidate}) + Google News RSS ({current_year})",
+                    "live_news_headlines": live_headlines,
+                    "answer": search_response.text,
+                }
+        except Exception:  # noqa: BLE001, S112
+            continue
+
+    return {
+        "in_database": False,
+        "current_date": today_str,
+        "source": f"Google News RSS ({current_year})",
+        "live_news_headlines": live_headlines,
+        "answer": (
+            f"Based on live {current_year} news headlines: "
+            + "; ".join(h["title"] for h in live_headlines)
+            if live_headlines
+            else f"Could not retrieve live {current_year} web results."
+        ),
+    }
 
 
 ALL_TOOLS = [

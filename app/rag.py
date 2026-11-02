@@ -257,4 +257,17 @@ def _build_chunks_from_seasonal_csv(
 
     return chunks
 
+def collect_all_knowledge_chunks() -> list[dict[str, Any]]:
+    """
+    Gather all RAG chunks strictly from local files (`data/knowledge/*.md` and
+    `data/all_seasonal_data.csv`) without querying MySQL.
+    """
+    KNOWLEDGE_DIR.mkdir(parents=True, exist_ok=True)
+    chunks: list[dict[str, Any]] = []
+
+    for md_file in sorted(KNOWLEDGE_DIR.glob("*.md")):
+        chunks.extend(_chunk_markdown_file(md_file))
+
+    chunks.extend(_build_chunks_from_seasonal_csv(SEASONAL_CSV_PATH))
+    return chunks
 

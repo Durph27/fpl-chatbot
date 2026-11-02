@@ -28,9 +28,6 @@ from typing import Any
 import pandas as pd
 from dotenv import load_dotenv
 from google import genai
-from sqlalchemy import text
-
-from app.db import engine
 
 load_dotenv()
 

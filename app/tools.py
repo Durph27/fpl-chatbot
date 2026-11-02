@@ -1,14 +1,17 @@
-"""MySQL query, squad-management, and real-time Google Search tools for the FPL Chatbot.
+"""MySQL query, squad-management, local RAG, and real-time Google Search tools for the FPL Chatbot.
 
 Compatible with the table structure in `app/ingest.py`, `app/ingest_manager.py`,
-and the Google GenAI SDK. Includes:
+`app/rag.py`, and the Google GenAI SDK. Includes:
   - General FPL tools: `get_player_info`, `top_players`, `compare_players`,
     `fixture_difficulty`, `gameweek_summary`
   - Personal manager tools: `refresh_manager`, `get_my_squad`, `analyze_my_squad`,
     `suggest_transfers`, `suggest_captain`
+  - Local RAG knowledge tool: `search_fpl_knowledge` (searches official FPL rules,
+    chip rules, scoring rules, and historical multi-season stats from
+    `data/all_seasonal_data.csv`)
   - Fallback SQL tool: `run_readonly_sql`
-  - Real-time Google Search tool: `search_premier_league_web` (for Premier League
-    and FPL questions whose data is not stored in the MySQL database)
+  - Real-time Google Search tool: `search_premier_league_web` (for live Premier League
+    and FPL questions not stored in the MySQL database or local RAG files)
 """
 
 import math
@@ -29,6 +32,7 @@ from sqlalchemy import text
 
 from app.db import engine
 from app.ingest_manager import sync_manager
+from app.rag import retrieve_fpl_knowledge
 
 
 def _clean_records(df: pd.DataFrame) -> list[dict[str, Any]]:
@@ -1091,6 +1095,29 @@ def suggest_captain(
 
 
 # =====================================================================
+# LOCAL RAG KNOWLEDGE TOOL (RULES, STRATEGY & HISTORICAL SEASONS CSV)
+# =====================================================================
+
+def search_fpl_knowledge(query: str, top_k: int = 5) -> dict[str, Any]:
+    """Search the local RAG knowledge base (`data/knowledge/fpl_rules.md` and historical multi-season stats aggregated from `data/all_seasonal_data.csv`).
+
+    Use this tool when the user asks about:
+      1. Official FPL rules, scoring system, Bonus Points (BPS), `defensive_contribution`, or Assistant Manager (`mng_*`) scoring.
+      2. Free transfer rollover rules (banking up to 5 Free Transfers), -4 point hits, or how player price rises/falls and the 50% sell-on profit rule work.
+      3. Chip rules and strategy (Wildcard, Free Hit, Bench Boost, Triple Captain, Assistant Manager).
+      4. Historical player performance or season leaderboards from past seasons stored in `data/all_seasonal_data.csv` (for example, 2021-22, 2022-23, 2023-24, 2024-25).
+
+    Args:
+        query: Search query describing the FPL rule, strategy concept, or historical season/player to retrieve.
+        top_k: Number of top semantic chunks to return (1-10, default 5).
+
+    Returns:
+        A dictionary containing the most relevant knowledge base chunks and their similarity scores.
+    """
+    return retrieve_fpl_knowledge(query=query, top_k=top_k)
+
+
+# =====================================================================
 # FALLBACK READ-ONLY SQL TOOL
 # =====================================================================
 
@@ -1116,6 +1143,7 @@ def run_readonly_sql(sql_query: str) -> dict[str, Any]:
 
     IMPORTANT DATABASE SCOPE RULES:
       - The tables above DO NOT store real-life club head coaches/managers, real-life club captains, referee names, or external football news. Do NOT call `run_readonly_sql` for those questions; call `search_premier_league_web` instead.
+      - For official FPL rules, chip mechanics, or historical multi-season stats from `all_seasonal_data.csv`, call `search_fpl_knowledge` instead.
       - When querying `fixtures` for a team `t.id`:
         * Clean sheet condition: `(f.team_h = t.id AND f.team_a_score = 0) OR (f.team_a = t.id AND f.team_h_score = 0)`
         * Goals scored by `t.id`: `CASE WHEN f.team_h = t.id THEN f.team_h_score ELSE f.team_a_score END`
@@ -1169,7 +1197,7 @@ def _fetch_google_news_rss(query: str, max_items: int = 8) -> list[dict[str, str
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     headlines: list[dict[str, str]] = []
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=8) as resp: 
             xml_bytes = resp.read()
         root = ET.fromstring(xml_bytes)
         for item in root.findall(".//item")[:max_items]:
@@ -1183,7 +1211,7 @@ def _fetch_google_news_rss(query: str, max_items: int = 8) -> list[dict[str, str
 
 
 def search_premier_league_web(question: str) -> dict[str, Any]:
-    """Search Google in real time for Premier League and FPL-related questions whose answers are NOT stored in the MySQL database (for example, who is the current head coach/manager of Manchester United, who is a club's real-life captain, or latest press conference news).
+    """Search Google in real time for Premier League and FPL-related questions whose answers are NOT stored in the MySQL database or local RAG files (for example, who is the current head coach/manager of Manchester United, who is a club's real-life captain, or latest press conference news).
 
     Do NOT call this tool for topics unrelated to football/Premier League/FPL.
 
@@ -1203,7 +1231,6 @@ def search_premier_league_web(question: str) -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         current_teams = []
 
-    # 1. Fetch live Google News RSS headlines explicitly anchored to the current year
     dated_query = f"{question} {current_year}" if str(current_year) not in question else question
     live_headlines = _fetch_google_news_rss(dated_query, max_items=8)
 
@@ -1240,7 +1267,7 @@ def search_premier_league_web(question: str) -> dict[str, Any]:
     )
 
     client = genai.Client(api_key=api_key)
-    for model_candidate in ("gemini-3.6-flash", "gemini-3.5-flash-lite"):
+    for model_candidate in ("gemini-2.5-flash", "gemini-2.0-flash"):
         try:
             search_response = client.models.generate_content(
                 model=model_candidate,
@@ -1286,6 +1313,7 @@ ALL_TOOLS = [
     analyze_my_squad,
     suggest_transfers,
     suggest_captain,
+    search_fpl_knowledge,
     run_readonly_sql,
     search_premier_league_web,
 ]

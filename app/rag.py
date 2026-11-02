@@ -362,3 +362,88 @@ def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return dot / (norm_a * norm_b)
+
+def _keyword_overlap_score(query: str, chunk_title: str, chunk_text: str) -> float:
+    tokens = [
+        tok
+        for tok in re.findall(r"[a-zA-Z0-9_\-]+", query.lower())
+        if len(tok) >= 2
+    ]
+    if not tokens:
+        return 0.0
+    title_lower = chunk_title.lower()
+    text_lower = chunk_text.lower()
+    score = 0.0
+    for tok in tokens:
+        if tok in title_lower:
+            score += 0.20
+        elif tok in text_lower:
+            score += 0.08
+    return min(score, 0.60)
+
+
+def retrieve_fpl_knowledge(
+    query: str,
+    top_k: int = 5,
+    category: str | None = None,
+) -> dict[str, Any]:
+    """
+    Search the local RAG index using hybrid semantic Cosine Similarity + keyword boost.
+    """
+    top_k = max(1, min(int(top_k), 10))
+    index_data = build_or_load_rag_index(force_rebuild=False)
+    chunks: list[dict[str, Any]] = index_data.get("chunks", [])
+
+    if category:
+        cat_clean = category.strip().lower()
+        chunks = [c for c in chunks if c.get("category", "").lower() == cat_clean]
+
+    if not chunks:
+        return {
+            "query": query,
+            "total_indexed_chunks": 0,
+            "results": [],
+        }
+
+    has_embeddings = any("embedding" in c for c in chunks)
+    query_vec: list[float] | None = None
+    if has_embeddings:
+        embedded_q = _embed_texts_in_batches([query], batch_size=1)
+        if embedded_q:
+            query_vec = embedded_q[0]
+
+    scored_results: list[dict[str, Any]] = []
+    for ch in chunks:
+        sem_score = (
+            _cosine_similarity(query_vec, ch.get("embedding", []))
+            if query_vec and ch.get("embedding")
+            else 0.0
+        )
+        kw_score = _keyword_overlap_score(query, ch.get("title", ""), ch.get("text", ""))
+        combined_score = round((0.75 * sem_score) + kw_score, 4) if query_vec else round(kw_score, 4)
+
+        scored_results.append({
+            "id": ch["id"],
+            "title": ch["title"],
+            "category": ch["category"],
+            "source": ch["source"],
+            "score": combined_score,
+            "content": ch["text"],
+        })
+
+    scored_results.sort(key=lambda x: x["score"], reverse=True)
+    return {
+        "query": query,
+        "retrieval_mode": "hybrid_vector_cosine_plus_keyword" if query_vec else "keyword_fallback",
+        "total_indexed_chunks": len(chunks),
+        "results": scored_results[:top_k],
+    }
+
+
+if __name__ == "__main__":
+    print("Building / verifying local FPL RAG knowledge index...")
+    idx = build_or_load_rag_index(force_rebuild=True)
+    print(
+        f"Indexed {idx['total_chunks']} chunks using '{idx['embedding_model']}' "
+        f"-> saved to {INDEX_CACHE_PATH}"
+    )

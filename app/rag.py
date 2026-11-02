@@ -271,3 +271,83 @@ def collect_all_knowledge_chunks() -> list[dict[str, Any]]:
     chunks.extend(_build_chunks_from_seasonal_csv(SEASONAL_CSV_PATH))
     return chunks
 
+
+
+def _compute_corpus_hash(chunks: list[dict[str, Any]]) -> str:
+    hasher = hashlib.sha256()
+    for ch in chunks:
+        hasher.update(ch["id"].encode("utf-8"))
+        hasher.update(ch["text"].encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def _embed_texts_in_batches(
+    texts: list[str],
+    batch_size: int = 80,
+) -> list[list[float]] | None:
+    """
+    Compute vector embeddings for a list of text chunks using `gemini-embedding-001`.
+    Returns None if `GEMINI_API_KEY` is missing or the API call fails.
+    """
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or not texts:
+        return None
+
+    client = genai.Client(api_key=api_key)
+    all_vectors: list[list[float]] = []
+
+    try:
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i : i + batch_size]
+            res = client.models.embed_content(
+                model=EMBEDDING_MODEL,
+                contents=batch,
+            )
+            for emb in res.embeddings:
+                all_vectors.append(list(emb.values))
+        return all_vectors
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def build_or_load_rag_index(force_rebuild: bool = False) -> dict[str, Any]:
+    """
+    Build or load the local RAG vector index at `data/knowledge_index.json`.
+    Only calls the Gemini Embedding API when the knowledge base files change or when
+    `force_rebuild=True`.
+    """
+    chunks = collect_all_knowledge_chunks()
+    corpus_hash = _compute_corpus_hash(chunks)
+
+    if not force_rebuild and INDEX_CACHE_PATH.exists():
+        try:
+            cached = json.loads(INDEX_CACHE_PATH.read_text(encoding="utf-8"))
+            if cached.get("corpus_hash") == corpus_hash and cached.get("chunks"):
+                return cached
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    texts_to_embed = [f"{c['title']}\n{c['text']}" for c in chunks]
+    vectors = _embed_texts_in_batches(texts_to_embed)
+
+    if vectors and len(vectors) == len(chunks):
+        for ch, vec in zip(chunks, vectors):
+            ch["embedding"] = vec
+
+    index_payload = {
+        "corpus_hash": corpus_hash,
+        "embedding_model": EMBEDDING_MODEL if vectors else "keyword_fallback",
+        "total_chunks": len(chunks),
+        "chunks": chunks,
+    }
+
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        INDEX_CACHE_PATH.write_text(
+            json.dumps(index_payload, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    return index_payload

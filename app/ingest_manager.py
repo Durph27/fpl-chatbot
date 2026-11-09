@@ -86,9 +86,7 @@ def calculate_free_transfers(
     free_transfers = 1
     for row in sorted(gw_history, key=lambda item: item["event"]):
         chip = chip_by_gw.get(row["event"])
-        if chip == "wildcard":
-            free_transfers = 1
-        elif chip != "freehit":
+        if chip not in ("wildcard", "freehit"):
             free_transfers = min(
                 5,
                 max(0, free_transfers - int(row.get("event_transfers") or 0)) + 1,

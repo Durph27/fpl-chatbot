@@ -91,13 +91,12 @@ def _get_next_gw() -> int:
 def _normalize_money(val: float | None) -> float:
     """
     Normalize FPL money values (`bank_balance` or `team_value`) to millions (£m).
-    If the value is stored in tenths (for example, 15 for £1.5m or 1005 for £100.5m),
-    divide by 10.
+    Manager ingestion already stores these values in millions.
     """
     if val is None:
         return 0.0
     num = float(val)
-    return round(num / 10.0, 1) if num > 35.0 else round(num, 1)
+    return round(num, 1)
 
 
 def _ensure_manager_synced(manager_id: int) -> dict[str, Any] | None:

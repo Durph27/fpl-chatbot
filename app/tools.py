@@ -1,13 +1,13 @@
-"""MySQL query, squad-management, local RAG, and real-time Google Search tools for the FPL Chatbot.
+"""MySQL query, squad-management, ChromaDB RAG, and real-time Google Search tools for the FPL Chatbot.
 
 Compatible with the table structure in `app/ingest.py`, `app/ingest_manager.py`,
-`app/rag.py`, and the Google GenAI SDK. Includes:
+`app/rag.py` (ChromaDB PersistentClient), and the Google GenAI SDK. Includes:
   - General FPL tools: `get_player_info`, `top_players`, `compare_players`,
     `fixture_difficulty`, `gameweek_summary`
   - Personal manager tools: `refresh_manager`, `get_my_squad`, `analyze_my_squad`,
     `suggest_transfers`, `suggest_captain`
-  - Local RAG knowledge tool: `search_fpl_knowledge` (searches official FPL rules,
-    chip rules, scoring rules, and historical multi-season stats from
+  - ChromaDB RAG knowledge tool: `search_fpl_knowledge` (searches official FPL rules,
+    chip rules, scoring rules, and complete multi-season player & Gameweek stats from
     `data/all_seasonal_data.csv`)
   - Fallback SQL tool: `run_readonly_sql`
   - Real-time Google Search tool: `search_premier_league_web` (for live Premier League
@@ -1095,26 +1095,32 @@ def suggest_captain(
 
 
 # =====================================================================
-# LOCAL RAG KNOWLEDGE TOOL (RULES, STRATEGY & HISTORICAL SEASONS CSV)
+# CHROMADB RAG KNOWLEDGE TOOL (RULES, STRATEGY & FULL HISTORICAL CSV)
 # =====================================================================
 
-def search_fpl_knowledge(query: str, top_k: int = 5) -> dict[str, Any]:
-    """Search the local RAG knowledge base (`data/knowledge/fpl_rules.md` and historical multi-season stats aggregated from `data/all_seasonal_data.csv`).
+def search_fpl_knowledge(
+    query: str,
+    season: str | None = None,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    """Query the local ChromaDB vector database (`data/chroma_db`) containing official FPL rules (`data/knowledge/fpl_rules.md`) and complete multi-season player & Gameweek stats from `data/all_seasonal_data.csv`.
 
     Use this tool when the user asks about:
       1. Official FPL rules, scoring system, Bonus Points (BPS), `defensive_contribution`, or Assistant Manager (`mng_*`) scoring.
       2. Free transfer rollover rules (banking up to 5 Free Transfers), -4 point hits, or how player price rises/falls and the 50% sell-on profit rule work.
       3. Chip rules and strategy (Wildcard, Free Hit, Bench Boost, Triple Captain, Assistant Manager).
-      4. Historical player performance or season leaderboards from past seasons stored in `data/all_seasonal_data.csv` (for example, 2021-22, 2022-23, 2023-24, 2024-25).
+      4. Historical player performance, Gameweek-by-Gameweek (`GW`) points logs, or season leaderboards from past seasons in `data/all_seasonal_data.csv` (for example, '2021-22', '2022-23', '2023-24', '2024-25').
 
     Args:
-        query: Search query describing the FPL rule, strategy concept, or historical season/player to retrieve.
-        top_k: Number of top semantic chunks to return (1-10, default 5).
+        query: Search query describing the FPL rule, strategy concept, or historical player/season to retrieve.
+        season: Optional historical season filter (for example, '2022-23' or '2023-24'). Leave empty for general rules or multi-season search.
+        top_k: Number of top semantic documents to return from ChromaDB (1-10, default 5).
 
     Returns:
-        A dictionary containing the most relevant knowledge base chunks and their similarity scores.
+        A dictionary containing the most relevant documents and similarity scores from ChromaDB.
     """
-    return retrieve_fpl_knowledge(query=query, top_k=top_k)
+    return retrieve_fpl_knowledge(query=query, top_k=top_k, season=season,
+                                  category="fpl_rules_and_strategy" if not season else None)
 
 
 # =====================================================================
@@ -1197,7 +1203,7 @@ def _fetch_google_news_rss(query: str, max_items: int = 8) -> list[dict[str, str
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     headlines: list[dict[str, str]] = []
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp: 
+        with urllib.request.urlopen(req, timeout=8) as resp:
             xml_bytes = resp.read()
         root = ET.fromstring(xml_bytes)
         for item in root.findall(".//item")[:max_items]:

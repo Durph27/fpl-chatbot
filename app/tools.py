@@ -33,6 +33,7 @@ from sqlalchemy import text
 from app.db import engine
 from app.ingest_manager import sync_manager
 from app.rag import retrieve_fpl_knowledge
+from app.history import historical_gameweeks
 
 
 def _clean_records(df: pd.DataFrame) -> list[dict[str, Any]]:
@@ -1308,6 +1309,7 @@ def search_premier_league_web(question: str) -> dict[str, Any]:
 
 
 ALL_TOOLS = [
+    historical_gameweeks,
     get_player_info,
     top_players,
     compare_players,

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AskFPL - Assistant Manager </title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- LEFT SIDEBAR: Manager Sync, Navigation, & Chat History -->
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <div class="brand">
+          <span class="brand-badge">FPL</span>
+          <span class="brand-title">AskFPL</span>
+        </div>
+        <button id="new-chat-btn" class="new-chat-btn" type="button">+ New Chat</button>
+      </header>
+
+      <!-- Manager ID / URL One-Time Sync Box -->
+      <section class="manager-box">
+        <label for="manager-input" class="section-label">FPL Manager ID or Team URL</label>
+        <div class="manager-input-row">
+          <input
+            id="manager-input"
+            type="text"
+            placeholder="e.g. 4791912 or paste FPL URL"
+            autocomplete="off"
+          />
+          <button id="sync-manager-btn" type="button">Sync</button>
+        </div>
+        <div id="manager-status" class="manager-status">
+          No Manager ID linked yet.
+          <a href="https://fantasy.premierleague.com/api/me/" target="_blank" rel="noopener">Find my ID</a>
+        </div>
+      </section>
+
+      <!-- Navigation Modules (Chat + Expandable Features) -->
+      <nav class="sidebar-nav">
+        <div class="section-label">Workspace</div>
+        <ul>
+          <li>
+            <button class="nav-item active" data-view="chat-view" type="button">
+              Chat Assistant
+            </button>
+          </li>
+          <li>
+            <button class="nav-item" data-view="squad-view" type="button">
+              My Squad Overview
+            </button>
+          </li>
+          <li>
+            <button class="nav-item" data-view="players-view" type="button">
+              Top Players Explorer
+            </button>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Persistent Conversation History List -->
+      <section class="history-section">
+        <div class="section-label">Recent Conversations</div>
+        <ul id="session-list" class="session-list"></ul>
+      </section>
+    </aside>
+
+    <!-- CENTER WORKSPACE: Main Chat & Feature Views -->
+    <main class="main-panel">
+      <!-- VIEW 1: CENTERED CHAT INTERFACE (Gemini / ChatGPT / Claude Style) -->
+      <section id="chat-view" class="view-section active">
+        <div id="chat-messages" class="chat-messages">
+          <div id="welcome-screen" class="welcome-screen">
+            <h1>How can I help with your FPL team today?</h1>
+            <p>
+              Ask about player stats, captaincy, optimal transfers, official FPL rules (ChromaDB RAG),
+              or live Premier League news.
+            </p>
+            <div class="starter-prompts">
+              <button class="prompt-chip" data-prompt="Show my current squad, bank balance, and available chips.">
+                Show my current squad &amp; bank
+              </button>
+              <button class="prompt-chip" data-prompt="Who should I captain in my squad for the upcoming Gameweek?">
+                Recommend my best captain
+              </button>
+              <button class="prompt-chip" data-prompt="Suggest the best transfers for my squad right now.">
+                Suggest optimal transfers
+              </button>
+              <button class="prompt-chip" data-prompt="Explain the 5 rolling free transfers rule and the 50% sell-on profit rule.">
+                FPL rules: 5 Free Transfers &amp; 50% profit
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <footer class="chat-composer-wrapper">
+          <form id="chat-form" class="chat-composer">
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Ask anything about FPL, your squad, historical stats, or rules..."
+              required
+            ></textarea>
+            <button id="send-btn" type="submit">Send</button>
+          </form>
+        </footer>
+      </section>
+
+      <!-- VIEW 2: MY SQUAD OVERVIEW (Expandable Left-Menu Feature) -->
+      <section id="squad-view" class="view-section">
+        <div class="feature-container">
+          <h2>My FPL Squad Overview</h2>
+          <div id="squad-content" class="feature-card">
+            <p>Enter and sync your FPL Manager ID in the left sidebar to inspect your 15-player squad.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: TOP PLAYERS EXPLORER (Expandable Left-Menu Feature) -->
+      <section id="players-view" class="view-section">
+        <div class="feature-container">
+          <div class="feature-header-row">
+            <h2>Top Players Explorer</h2>
+            <div class="filter-controls">
+              <select id="filter-position">
+                <option value="">All Positions</option>
+                <option value="GK">GK</option>
+                <option value="DEF">DEF</option>
+                <option value="MID">MID</option>
+                <option value="FWD">FWD</option>
+              </select>
+              <select id="filter-sort">
+                <option value="form">Sort by Form</option>
+                <option value="ep_next">Sort by Expected Points (ep_next)</option>
+                <option value="total_points">Sort by Total Points</option>
+                <option value="value">Sort by Value (Pts / £m)</option>
+                <option value="xgi">Sort by xGI</option>
+              </select>
+              <button id="load-players-btn" type="button">Filter</button>
+            </div>
+          </div>
+          <div id="players-table-container" class="feature-card"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

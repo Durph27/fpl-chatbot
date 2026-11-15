@@ -1,0 +1,468 @@
+/* Minimalist Flexbox Layout styled after ChatGPT / Claude / Gemini */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-main: #131314;
+  --bg-sidebar: #1e1f20;
+  --bg-surface: #282a2c;
+  --bg-hover: #333538;
+  --bg-user-msg: #2b2d31;
+  --accent: #00ff87;
+  --accent-dark: #37003c;
+  --text-primary: #e3e3e3;
+  --text-secondary: #9aa0a6;
+  --border-color: #3c4043;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* =====================================================================
+   LEFT SIDEBAR
+   ===================================================================== */
+.sidebar {
+  width: 290px;
+  min-width: 290px;
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px;
+  gap: 16px;
+}
+
+.sidebar-header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px;
+}
+
+.brand-badge {
+  background-color: var(--accent);
+  color: var(--accent-dark);
+  font-weight: 800;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.brand-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.new-chat-btn {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.new-chat-btn:hover {
+  background-color: var(--bg-hover);
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding: 0 6px;
+}
+
+/* Manager Sync Box */
+.manager-box {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manager-input-row {
+  display: flex;
+  gap: 6px;
+}
+
+.manager-input-row input {
+  flex: 1;
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.manager-input-row button {
+  background-color: var(--accent);
+  color: var(--accent-dark);
+  border: none;
+  border-radius: 6px;
+  padding: 0 12px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.manager-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.manager-status a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-item {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  padding: 9px 10px;
+  border-radius: 8px;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.nav-item:hover,
+.nav-item.active {
+  background-color: var(--bg-surface);
+}
+
+/* Conversation History List */
+.history-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.session-list {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.session-item:hover,
+.session-item.active {
+  background-color: var(--bg-surface);
+}
+
+.session-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.delete-session-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  visibility: hidden;
+}
+
+.session-item:hover .delete-session-btn {
+  visibility: visible;
+}
+
+/* =====================================================================
+   CENTER MAIN PANEL
+   ===================================================================== */
+.main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.view-section {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.view-section.active {
+  display: flex;
+}
+
+/* Chat Stream */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.welcome-screen {
+  max-width: 760px;
+  margin: auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.welcome-screen h1 {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.welcome-screen p {
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.starter-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.prompt-chip {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.prompt-chip:hover {
+  background-color: var(--bg-hover);
+}
+
+/* Individual Message Rows (Centered 800px column) */
+.message-row {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.message-row.user {
+  align-items: flex-end;
+}
+
+.message-bubble {
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.message-row.user .message-bubble {
+  background-color: var(--bg-user-msg);
+  padding: 12px 16px;
+  border-radius: 18px;
+  max-width: 80%;
+}
+
+.message-row.assistant .message-bubble {
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* Tool Badges */
+.tool-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.tool-badge {
+  font-size: 11px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+/* Markdown Tables inside Chat & Explorer */
+.message-bubble table,
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13.5px;
+}
+
+.message-bubble th,
+.message-bubble td,
+.data-table th,
+.data-table td {
+  border: 1px solid var(--border-color);
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.message-bubble th,
+.data-table th {
+  background-color: var(--bg-surface);
+  font-weight: 600;
+}
+
+.message-bubble ul,
+.message-bubble ol {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+
+/* Bottom Chat Input Bar */
+.chat-composer-wrapper {
+  padding: 12px 20px 22px;
+}
+
+.chat-composer {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-composer textarea {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 15px;
+  resize: none;
+  max-height: 140px;
+  font-family: inherit;
+}
+
+.chat-composer button {
+  background-color: var(--accent);
+  color: var(--accent-dark);
+  border: none;
+  border-radius: 16px;
+  padding: 8px 16px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chat-composer button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Secondary Feature Views (My Squad & Top Players) */
+.feature-container {
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 28px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.feature-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.filter-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-controls select,
+.filter-controls button {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.feature-card {
+  background-color: var(--bg-sidebar);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 18px;
+}

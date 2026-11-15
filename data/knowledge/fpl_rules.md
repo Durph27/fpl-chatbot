@@ -55,7 +55,13 @@
   - Under the updated FPL rules, unused Free Transfers roll over and can be banked up to a maximum of **5 Free Transfers** (`managers.free_transfers`).
   - **Preserved Transfers When Using Chips**: When you activate the **Wildcard** or **Free Hit** chip, any banked Free Transfers (up to 5) are **preserved** for the following Gameweek instead of resetting to 1!
 - **Point Hits (-4 Points)**:
-  - Each extra transfer made beyond your available `free_transfers` in a Gameweek costs **-4 points** deducted from your score at the next Gameweek deadline (unless Wildcard or Free Hit is active).
+  - **Charge 4 points for EACH individual transfer beyond the available Free Transfers (FT), not once for the whole batch.** Making several transfers simultaneously does not combine them into one charge.
+  - For normal transfers without Wildcard or Free Hit, calculate: `extra_transfers = max(0, total_transfers - available_free_transfers)`; `points_deducted = 4 * extra_transfers`; `score_adjustment = -points_deducted`.
+  - **Worked example: 1 FT, 3 normal transfers, no chip:** the first transfer is free; the second costs 4 points; the third costs another 4 points. There are `3 - 1 = 2` paid transfers, so the total deduction is `2 * 4 = 8 points` (score adjustment **-8**, NOT -4).
+  - **Vietnamese example:** Có **1 Free Transfer**, thực hiện đồng thời **3 chuyển nhượng thường**, không dùng chip: **bị trừ tổng cộng 8 điểm (-8)**. Chuyển nhượng thứ nhất miễn phí, chuyển nhượng thứ hai bị trừ 4 điểm, chuyển nhượng thứ ba bị trừ thêm 4 điểm. Làm cùng lúc không thay đổi cách tính.
+  - Additional examples without a chip: 1 FT and 2 transfers = **-4 points**; 1 FT and 4 transfers = **-12 points**; 2 FT and 3 transfers = **-4 points**; 3 FT and 3 transfers = **0 points**.
+  - **There is NO 4-point cap per Gameweek.** Never claim that all paid transfers together cost only 4 points, or that the charge does not multiply by the number of additional transfers. The phrase "a -4 point hit" means the cost of ONE additional transfer.
+  - Wildcard or Free Hit makes transfers covered by that active chip cost **0 points**. Otherwise, the calculated deduction is applied to the Gameweek score at the next deadline.
 - **Player Price Changes and the 50% Sell-On Profit Rule**:
   - Player prices (`price`) rise or fall by **£0.1m** per day (up to a maximum of **±£0.3m** within a single Gameweek) based on net transfer volume (`transfers_in_event` vs `transfers_out_event`).
   - **50% Sell-On Rule**: When you sell a player whose current price is higher than the price you bought them for, you only keep **50% of the profit, rounded down to the nearest £0.1m**. For example, if you bought a player at £7.0m and their price rises to £7.3m, your selling price is £7.1m (+£0.1m profit). If they rise to £7.4m, your selling price is £7.2m (+£0.2m profit). If a player's price drops below your purchase price, you lose the full drop amount.

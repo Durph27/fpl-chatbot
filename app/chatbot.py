@@ -25,6 +25,7 @@ from app.tools import ALL_TOOLS, TOOL_MAP, refresh_manager
 
 load_dotenv()
 
+MODEL_NAME = os.getenv("MODEL_NAME")
 
 def _build_system_instruction(active_manager_id: int | None = None) -> str:
     today_str = datetime.now().strftime("%B %d, %Y")
@@ -80,7 +81,7 @@ def get_gemini_client() -> genai.Client:
     return genai.Client(api_key=api_key)
 
 
-def create_auto_chat_session(model_name: str = "gemini-3.5-flash-lite"):
+def create_auto_chat_session(model_name: str = MODEL_NAME):
     """Create a multi-turn chat session with automatic tool execution."""
     client = get_gemini_client()
     config = types.GenerateContentConfig(
@@ -94,7 +95,7 @@ def create_auto_chat_session(model_name: str = "gemini-3.5-flash-lite"):
 def ask_with_manual_tool_loop(
     user_message: str,
     history: list[types.Content] | None = None,
-    model_name: str = "gemini-3.5-flash-lite",
+    model_name: str = MODEL_NAME,
     active_manager_id: int | None = None,
     tools_used_out: list[str] | None = None,
 ) -> tuple[str, list[types.Content]]:
@@ -157,7 +158,7 @@ def run_web_chat_turn(
     user_message: str,
     prior_messages: list[dict[str, Any]],
     manager_id: int | None = None,
-    model_name: str = "gemini-3.5-flash-lite",
+    model_name: str = MODEL_NAME,
 ) -> dict[str, Any]:
     """
     Helper for the FastAPI web backend (`app/server.py`).

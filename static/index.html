@@ -1,59 +1,102 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AskFPL - Assistant Manager </title>
-  <link rel="stylesheet" href="/static/style.css" />
+  <title>askFPL — AI Assistant Manager</title>
+  <link rel="icon" type="image/png" sizes="64x64" href="/static/images/askFPL_avatar_64.png?v=5" />
+  <link rel="icon" type="image/png" sizes="128x128" href="/static/images/askFPL_avatar_128.png?v=5" />
+  <link rel="icon" type="image/png" sizes="256x256" href="/static/images/askFPL_avatar_256.png?v=5" />
+  <link rel="apple-touch-icon" href="/static/images/askFPL_avatar_256.png?v=5" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css?v=5" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem("fpl_theme");
+      const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const theme = savedTheme || (prefersDark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
 </head>
+
 <body>
-  <div class="app-layout">
-    <!-- LEFT SIDEBAR: Manager Sync, Navigation, & Chat History -->
-    <aside class="sidebar">
+  <div id="app-layout" class="app-layout">
+    <!-- Mobile Sidebar Backdrop -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- LEFT SIDEBAR: Brand, Navigation, Chat History, & Bottom Manager Sync -->
+    <aside id="sidebar" class="sidebar" aria-label="Sidebar navigation">
       <header class="sidebar-header">
-        <div class="brand">
-          <span class="brand-badge">FPL</span>
-          <span class="brand-title">AskFPL</span>
+        <div class="sidebar-header-top">
+          <a href="#" id="brand-home-link" class="brand" aria-label="AskFPL Home">
+            <span class="brand-icon-wrap">
+              <img src="/static/images/askFPL_icon.png?v=5" alt="AskFPL Icon" class="brand-icon" width="42" height="45" />
+            </span>
+            <span class="brand-wordmark-wrap">
+              <img src="/static/images/askFPL_wordmark.png?v=5" alt="askFPL" class="brand-wordmark" width="116" height="29" />
+            </span>
+          </a>
+
+          <button id="close-sidebar-btn" class="icon-btn sidebar-close-btn" type="button"
+            title="Close sidebar" aria-label="Close sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+              <polyline points="15 9 12 12 15 15" />
+            </svg>
+          </button>
         </div>
-        <button id="new-chat-btn" class="new-chat-btn" type="button">+ New Chat</button>
+
+        <button id="new-chat-btn" class="new-chat-btn" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+          <span>New Chat</span>
+        </button>
       </header>
 
-      <!-- Manager ID / URL One-Time Sync Box -->
-      <section class="manager-box">
-        <label for="manager-input" class="section-label">FPL Manager ID or Team URL</label>
-        <div class="manager-input-row">
-          <input
-            id="manager-input"
-            type="text"
-            placeholder="e.g. 4791912 or paste FPL URL"
-            autocomplete="off"
-          />
-          <button id="sync-manager-btn" type="button">Sync</button>
-        </div>
-        <div id="manager-status" class="manager-status">
-          No Manager ID linked yet.
-          <a href="https://fantasy.premierleague.com/api/me/" target="_blank" rel="noopener">Find my ID</a>
-        </div>
-      </section>
-
       <!-- Navigation Modules (Chat + Expandable Features) -->
-      <nav class="sidebar-nav">
+      <nav class="sidebar-nav" aria-label="Workspace navigation">
         <div class="section-label">Workspace</div>
         <ul>
           <li>
-            <button class="nav-item active" data-view="chat-view" type="button">
-              Chat Assistant
+            <button class="nav-item active" data-view="chat-view" data-title="Chat Assistant" type="button">
+              <svg class="nav-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Chat Assistant</span>
             </button>
           </li>
           <li>
-            <button class="nav-item" data-view="squad-view" type="button">
-              My Squad Overview
+            <button class="nav-item" data-view="squad-view" data-title="My Squad Overview" type="button">
+              <svg class="nav-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <span>My Squad Overview</span>
             </button>
           </li>
           <li>
-            <button class="nav-item" data-view="players-view" type="button">
-              Top Players Explorer
+            <button class="nav-item" data-view="players-view" data-title="Top Players Explorer" type="button">
+              <svg class="nav-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span>Top Players Explorer</span>
             </button>
           </li>
         </ul>
@@ -64,14 +107,89 @@
         <div class="section-label">Recent Conversations</div>
         <ul id="session-list" class="session-list"></ul>
       </section>
+
+      <!-- BOTTOM-LEFT: Manager ID / URL One-Time Sync Box -->
+      <footer class="sidebar-footer">
+        <section class="manager-box">
+          <div class="manager-box-header">
+            <label for="manager-input" class="section-label manager-label">FPL Manager ID / URL</label>
+            <a class="find-id-link" href="https://fantasy.premierleague.com/api/me/" target="_blank" rel="noopener">
+              Find my ID ↗
+            </a>
+          </div>
+          <div class="manager-input-row">
+            <input
+              id="manager-input"
+              type="text"
+              placeholder="e.g. 4791912 or FPL URL"
+              autocomplete="off"
+            />
+            <button id="sync-manager-btn" type="button">Sync</button>
+          </div>
+          <div id="manager-status" class="manager-status">
+            No Manager ID linked yet.
+          </div>
+        </section>
+      </footer>
     </aside>
 
     <!-- CENTER WORKSPACE: Main Chat & Feature Views -->
     <main class="main-panel">
-      <!-- VIEW 1: CENTERED CHAT INTERFACE (Gemini / ChatGPT / Claude Style) -->
+      <!-- TOP BAR: Open Sidebar Button (left) + Dark/Light Mode Button (right) -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="open-sidebar-btn" class="icon-btn open-sidebar-btn" type="button"
+            title="Open sidebar" aria-label="Open sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+              <polyline points="13 9 16 12 13 15" />
+            </svg>
+          </button>
+
+          <div class="topbar-brand-pill">
+            <span id="topbar-title" class="topbar-title">Chat Assistant</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button id="theme-toggle-btn" class="theme-toggle-btn" type="button"
+            title="Toggle Dark / Light Mode" aria-label="Toggle Dark or Light Mode">
+            <svg class="theme-icon icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+            </svg>
+            <svg class="theme-icon icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+            <span id="theme-toggle-label" class="theme-toggle-label">Light Mode</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- VIEW 1: CENTERED CHAT INTERFACE -->
       <section id="chat-view" class="view-section active">
         <div id="chat-messages" class="chat-messages">
           <div id="welcome-screen" class="welcome-screen">
+            <div class="welcome-hero-logo">
+              <div class="welcome-mascot-ring">
+                <img src="/static/images/askFPL_icon.png?v=5" alt="AskFPL Logo" class="welcome-mascot" width="132" height="143" />
+              </div>
+              <div class="welcome-wordmark-stack">
+                <img src="/static/images/askFPL_wordmark.png?v=5" alt="askFPL" class="welcome-wordmark" width="210" height="52" />
+              </div>
+            </div>
+
             <h1>How can I help with your FPL team today?</h1>
             <p>
               Ask about player stats, captaincy, optimal transfers, official FPL rules (ChromaDB RAG),
@@ -79,16 +197,20 @@
             </p>
             <div class="starter-prompts">
               <button class="prompt-chip" data-prompt="Show my current squad, bank balance, and available chips.">
-                Show my current squad &amp; bank
+                <span class="chip-icon">⚽</span>
+                <span>Show my current squad &amp; bank</span>
               </button>
               <button class="prompt-chip" data-prompt="Who should I captain in my squad for the upcoming Gameweek?">
-                Recommend my best captain
+                <span class="chip-icon">👑</span>
+                <span>Recommend my best captain</span>
               </button>
               <button class="prompt-chip" data-prompt="Suggest the best transfers for my squad right now.">
-                Suggest optimal transfers
+                <span class="chip-icon">🔄</span>
+                <span>Suggest optimal transfers</span>
               </button>
               <button class="prompt-chip" data-prompt="Explain the 5 rolling free transfers rule and the 50% sell-on profit rule.">
-                FPL rules: 5 Free Transfers &amp; 50% profit
+                <span class="chip-icon">📘</span>
+                <span>FPL rules: 5 Free Transfers &amp; 50% profit</span>
               </button>
             </div>
           </div>
@@ -102,26 +224,43 @@
               placeholder="Ask anything about FPL, your squad, historical stats, or rules..."
               required
             ></textarea>
-            <button id="send-btn" type="submit">Send</button>
+            <button id="send-btn" class="send-btn" type="submit">
+              <span>Send</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
           </form>
         </footer>
       </section>
 
-      <!-- VIEW 2: MY SQUAD OVERVIEW (Expandable Left-Menu Feature) -->
+      <!-- VIEW 2: MY SQUAD OVERVIEW -->
       <section id="squad-view" class="view-section">
         <div class="feature-container">
-          <h2>My FPL Squad Overview</h2>
+          <div class="feature-header-row">
+            <div>
+              <h2>My FPL Squad Overview</h2>
+              <p class="feature-subtitle">Inspect your 15-player squad, bank balance, and free transfers.</p>
+            </div>
+          </div>
           <div id="squad-content" class="feature-card">
-            <p>Enter and sync your FPL Manager ID in the left sidebar to inspect your 15-player squad.</p>
+            <p class="empty-state-text">
+              Enter and sync your FPL Manager ID in the bottom-left sidebar to inspect your 15-player squad.
+            </p>
           </div>
         </div>
       </section>
 
-      <!-- VIEW 3: TOP PLAYERS EXPLORER (Expandable Left-Menu Feature) -->
+      <!-- VIEW 3: TOP PLAYERS EXPLORER -->
       <section id="players-view" class="view-section">
         <div class="feature-container">
           <div class="feature-header-row">
-            <h2>Top Players Explorer</h2>
+            <div>
+              <h2>Top Players Explorer</h2>
+              <p class="feature-subtitle">Filter Premier League players by position, form, expected points, and value.</p>
+            </div>
             <div class="filter-controls">
               <select id="filter-position">
                 <option value="">All Positions</option>
@@ -137,7 +276,7 @@
                 <option value="value">Sort by Value (Pts / £m)</option>
                 <option value="xgi">Sort by xGI</option>
               </select>
-              <button id="load-players-btn" type="button">Filter</button>
+              <button id="load-players-btn" class="primary-btn" type="button">Filter</button>
             </div>
           </div>
           <div id="players-table-container" class="feature-card"></div>
@@ -146,6 +285,7 @@
     </main>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=5"></script>
 </body>
+
 </html>

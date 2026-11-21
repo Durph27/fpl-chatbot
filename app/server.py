@@ -130,7 +130,15 @@ def serve_index():
     index_file = STATIC_DIR / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="static/index.html not found.")
-    return FileResponse(str(index_file))
+    return FileResponse(str(index_file), headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/favicon.ico")
+def serve_favicon():
+    favicon_file = STATIC_DIR / "images" / "askFPL_avatar_64.png"
+    if not favicon_file.exists():
+        raise HTTPException(status_code=404, detail="Favicon not found.")
+    return FileResponse(str(favicon_file), headers={"Cache-Control": "no-cache"})
 
 
 # =====================================================================

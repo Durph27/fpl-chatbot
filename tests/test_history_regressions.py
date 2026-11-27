@@ -26,7 +26,18 @@ class HistoryRegressions(unittest.TestCase):
 
     def test_wildcard_preserves_transfers(self):
         history = [{'event': gw, 'event_transfers': 0} for gw in range(1, 5)]
-        self.assertEqual(calculate_free_transfers(history, [{'event': 4, 'name': 'wildcard'}]), 4)
+        self.assertEqual(calculate_free_transfers(history, [{'event': 4, 'name': 'wildcard'}]), 3)
+
+    def test_free_transfers_gw1_and_weekly_spend(self):
+        # After GW1 (initial squad), manager receives 1 FT for GW2.
+        self.assertEqual(calculate_free_transfers([{'event': 1, 'event_transfers': 0}], []), 1)
+        # Spending 1 transfer each GW from GW2 onward keeps 1 FT available.
+        history = [
+            {'event': 1, 'event_transfers': 0},
+            {'event': 2, 'event_transfers': 1},
+            {'event': 3, 'event_transfers': 1},
+        ]
+        self.assertEqual(calculate_free_transfers(history, []), 1)
 
 
 if __name__ == '__main__':

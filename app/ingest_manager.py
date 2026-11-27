@@ -82,8 +82,10 @@ def calculate_free_transfers(
     gw_history: list[dict[str, Any]], chips: list[dict[str, Any]]
 ) -> int:
     """Estimate the free transfers available for the next gameweek (maximum 5)."""
+    if not gw_history:
+        return 1
     chip_by_gw = {chip.get("event"): chip.get("name") for chip in chips}
-    free_transfers = 1
+    free_transfers = 0
     for row in sorted(gw_history, key=lambda item: item["event"]):
         chip = chip_by_gw.get(row["event"])
         if chip not in ("wildcard", "freehit"):

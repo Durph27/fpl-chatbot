@@ -701,17 +701,36 @@ def get_my_squad(manager_id: int) -> dict[str, Any]:
             ms.is_captain,
             ms.is_vice_captain,
             p.id AS player_id,
+            p.id,
             p.web_name,
             CONCAT(p.first_name, ' ', p.second_name) AS full_name,
             t.id AS team_id,
             t.short_name AS team,
+            t.name AS team_name,
             p.position,
             p.price,
-            p.form,
-            p.ep_next,
+            p.selected_by_percent,
             p.total_points,
+            p.form,
             p.points_per_game,
+            p.ep_next,
+            ROUND(p.total_points / NULLIF(p.price, 0), 2) AS value_points_per_m,
             p.minutes,
+            p.starts,
+            p.goals_scored,
+            p.assists,
+            p.clean_sheets,
+            p.goals_conceded,
+            p.expected_goals AS xG,
+            p.expected_assists AS xA,
+            p.expected_goal_involvements AS xGI,
+            p.expected_goals_conceded AS xGC,
+            p.ict_index,
+            p.bonus,
+            p.bps,
+            p.yellow_cards,
+            p.red_cards,
+            p.saves,
             p.status,
             p.news,
             p.chance_of_playing_next_round
@@ -727,6 +746,28 @@ def get_my_squad(manager_id: int) -> dict[str, Any]:
         engine,
         params={"mid": target_id},
     )
+    gw_hist_sql = text("""
+        SELECT
+            mgh.gw,
+            mgh.points,
+            mgh.total_points,
+            mgh.overall_rank,
+            mgh.gw_rank,
+            mgh.bank,
+            mgh.team_value,
+            mgh.event_transfers,
+            mgh.event_transfers_cost,
+            mgh.points_on_bench,
+            e.average_entry_score AS gw_average,
+            e.highest_score AS gw_highest,
+            mc.chip_name
+        FROM manager_gw_history mgh
+        LEFT JOIN events e ON e.id = mgh.gw
+        LEFT JOIN manager_chips mc ON mc.manager_id = mgh.manager_id AND mc.gw = mgh.gw
+        WHERE mgh.manager_id = :mid
+        ORDER BY mgh.gw ASC
+    """)
+    gw_hist_df = pd.read_sql(gw_hist_sql, engine, params={"mid": target_id})
 
     mgr_info = _clean_records(mgr_df)[0]
     mgr_info["bank_balance_m"] = _normalize_money(mgr_info.get("bank_balance"))
@@ -742,11 +783,14 @@ def get_my_squad(manager_id: int) -> dict[str, Any]:
         "found": True,
         "manager": mgr_info,
         "squad_gw": int(latest_gw),
+        "overall_points": mgr_info.get("overall_points"),
+        "overall_rank": mgr_info.get("overall_rank"),
         "bank_balance_m": mgr_info["bank_balance_m"],
         "team_value_m": mgr_info["team_value_m"],
         "free_transfers": mgr_info.get("free_transfers"),
         "available_chips": mgr_info.get("available_chips"),
         "chips_used": _clean_records(chips_df),
+        "gw_history": _clean_records(gw_hist_df),
         "current_captain": captain,
         "current_vice_captain": vice_captain,
         "starting_xi": starting_xi,

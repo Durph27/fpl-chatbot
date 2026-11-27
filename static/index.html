@@ -5,14 +5,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>askFPL — AI Assistant Manager</title>
-  <link rel="icon" type="image/png" sizes="64x64" href="/static/images/askFPL_avatar_64.png?v=5" />
-  <link rel="icon" type="image/png" sizes="128x128" href="/static/images/askFPL_avatar_128.png?v=5" />
-  <link rel="icon" type="image/png" sizes="256x256" href="/static/images/askFPL_avatar_256.png?v=5" />
-  <link rel="apple-touch-icon" href="/static/images/askFPL_avatar_256.png?v=5" />
+  <link rel="icon" type="image/png" sizes="64x64" href="/static/images/askFPL_avatar_64.png?v=6" />
+  <link rel="icon" type="image/png" sizes="128x128" href="/static/images/askFPL_avatar_128.png?v=6" />
+  <link rel="icon" type="image/png" sizes="256x256" href="/static/images/askFPL_avatar_256.png?v=6" />
+  <link rel="apple-touch-icon" href="/static/images/askFPL_avatar_256.png?v=6" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=5" />
+  <link rel="stylesheet" href="/static/style.css?v=8" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     (function () {
@@ -89,14 +89,14 @@
             </button>
           </li>
           <li>
-            <button class="nav-item" data-view="players-view" data-title="Top Players Explorer" type="button">
+            <button class="nav-item" data-view="players-view" data-title="Players Explorer" type="button">
               <svg class="nav-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="20" x2="18" y2="10" />
                 <line x1="12" y1="20" x2="12" y2="4" />
                 <line x1="6" y1="20" x2="6" y2="14" />
               </svg>
-              <span>Top Players Explorer</span>
+              <span>Players Explorer</span>
             </button>
           </li>
         </ul>
@@ -238,14 +238,14 @@
 
       <!-- VIEW 2: MY SQUAD OVERVIEW -->
       <section id="squad-view" class="view-section">
-        <div class="feature-container">
+        <div class="feature-container squad-feature-container">
           <div class="feature-header-row">
             <div>
               <h2>My FPL Squad Overview</h2>
-              <p class="feature-subtitle">Inspect your 15-player squad, bank balance, and free transfers.</p>
+              <p class="feature-subtitle">Inspect your 15-player squad with full stats, total points, and team Gameweek points chart. Click any player for their individual chart.</p>
             </div>
           </div>
-          <div id="squad-content" class="feature-card">
+          <div id="squad-content" class="feature-card squad-overview-card">
             <p class="empty-state-text">
               Enter and sync your FPL Manager ID in the bottom-left sidebar to inspect your 15-player squad.
             </p>
@@ -253,39 +253,95 @@
         </div>
       </section>
 
-      <!-- VIEW 3: TOP PLAYERS EXPLORER -->
+      <!-- VIEW 3: PLAYERS EXPLORER -->
       <section id="players-view" class="view-section">
-        <div class="feature-container">
+        <div class="feature-container players-feature-container">
           <div class="feature-header-row">
             <div>
-              <h2>Top Players Explorer</h2>
-              <p class="feature-subtitle">Filter Premier League players by position, form, expected points, and value.</p>
+              <div class="players-title-row">
+                <h2>Players Explorer</h2>
+                <span id="players-count-badge" class="players-count-badge">Loading...</span>
+              </div>
             </div>
-            <div class="filter-controls">
-              <select id="filter-position">
+            <div class="filter-controls players-filter-controls">
+              <input
+                id="filter-search"
+                type="search"
+                class="filter-search-input"
+                placeholder="Search player or club..."
+                aria-label="Search player or club"
+                autocomplete="off"
+              />
+              <select id="filter-team" aria-label="Filter by club">
+                <option value="">All Clubs</option>
+              </select>
+              <select id="filter-position" aria-label="Filter by position">
                 <option value="">All Positions</option>
                 <option value="GK">GK</option>
                 <option value="DEF">DEF</option>
                 <option value="MID">MID</option>
                 <option value="FWD">FWD</option>
               </select>
-              <select id="filter-sort">
-                <option value="form">Sort by Form</option>
-                <option value="ep_next">Sort by Expected Points (ep_next)</option>
-                <option value="total_points">Sort by Total Points</option>
-                <option value="value">Sort by Value (Pts / £m)</option>
-                <option value="xgi">Sort by xGI</option>
+              <select id="filter-max-price" aria-label="Filter by max price">
+                <option value="">All Prices</option>
+                <option value="4.5">≤ £4.5m</option>
+                <option value="5.5">≤ £5.5m</option>
+                <option value="6.5">≤ £6.5m</option>
+                <option value="7.5">≤ £7.5m</option>
+                <option value="9.0">≤ £9.0m</option>
+                <option value="11.0">≤ £11.0m</option>
               </select>
-              <button id="load-players-btn" class="primary-btn" type="button">Filter</button>
+              <select id="filter-sort" aria-label="Sort players by">
+                <option value="total_points">Sort: Total Points</option>
+                <option value="form">Sort: Form</option>
+                <option value="ep_next">Sort: Expected Points (ep_next)</option>
+                <option value="price">Sort: Price</option>
+                <option value="selected_by_percent">Sort: Ownership (TSB%)</option>
+                <option value="minutes">Sort: Minutes</option>
+                <option value="goals_scored">Sort: Goals</option>
+                <option value="assists">Sort: Assists</option>
+                <option value="clean_sheets">Sort: Clean Sheets</option>
+                <option value="xG">Sort: xG</option>
+                <option value="xA">Sort: xA</option>
+                <option value="xGI">Sort: xGI</option>
+                <option value="ict_index">Sort: ICT Index</option>
+                <option value="bonus">Sort: Bonus</option>
+                <option value="bps">Sort: BPS</option>
+                <option value="points_per_game">Sort: PPG</option>
+                <option value="value_points_per_m">Sort: Value (Pts / £m)</option>
+              </select>
+              <button id="load-players-btn" class="primary-btn" type="button" title="Reload players from database">
+                Refresh
+              </button>
             </div>
           </div>
-          <div id="players-table-container" class="feature-card"></div>
+          <div id="players-table-container" class="feature-card players-table-card"></div>
         </div>
       </section>
     </main>
   </div>
 
-  <script src="/static/app.js?v=5"></script>
+  <!-- PLAYER GAMEWEEK POINTS CHART MODAL -->
+  <div id="player-modal" class="player-modal hidden" role="dialog" aria-modal="true" aria-labelledby="player-modal-title">
+    <div id="player-modal-backdrop" class="player-modal-backdrop"></div>
+    <div class="player-modal-card">
+      <div class="player-modal-header-bar">
+        <div id="player-modal-header" class="player-modal-header">
+          <h3 id="player-modal-title">Player Details</h3>
+        </div>
+        <button id="close-player-modal-btn" class="icon-btn" type="button" title="Close modal" aria-label="Close modal">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div id="player-modal-body" class="player-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=8"></script>
 </body>
 
 </html>
